@@ -1,0 +1,197 @@
+--Database Name is --Maven
+--Database Environment : MSSQL SERVER
+
+SELECT Sa.Sale_ID 'Sales_ID', Sa.date 'Date' , Pr.Product_ID 'Product_ID', Pr.Product_Name 'Product_Name', Pr.Product_Cost 'Product_Cost', 
+		Pr.Product_Price 'Product_Price', St.Store_ID 'Store_ID', St.Store_Location 'Store_Location' , St.Store_Name 'Store_Name'
+FROM Sales Sa Join Products Pr ON Sa.Product_ID = Pr.Product_ID
+Join Stores St ON St.Store_ID = Sa.Store_ID;
+
+WITH SalesOrderDetails AS 
+(
+SELECT Sa.Sale_ID 'Sales_ID', Sa.date 'Date' , Pr.Product_ID 'Product_ID', Pr.Product_Name 'Product_Name', Pr.Product_Cost 'Product_Cost', 
+		Pr.Product_Price 'Product_Price', St.Store_ID 'Store_ID', St.Store_Location 'Store_Location' , St.Store_Name 'Store_Name', Sa.Units as 'Units'
+FROM Sales Sa Join Products Pr ON Sa.Product_ID = Pr.Product_ID
+Join Stores St ON St.Store_ID = Sa.Store_ID
+) 
+Select Store_Location, SUM(Product_Cost * Units) AS TotalSalesByLocation
+FROM SalesOrderDetails
+group by Store_Location
+Order By TotalSalesByLocation;
+
+WITH SalesOrderDetails AS 
+(
+SELECT Sa.Sale_ID 'Sales_ID', Sa.date 'Date' , Pr.Product_ID 'Product_ID', Pr.Product_Name 'Product_Name', Pr.Product_Cost 'Product_Cost', 
+		Pr.Product_Price 'Product_Price', St.Store_ID 'Store_ID', St.Store_Location 'Store_Location' , St.Store_Name 'Store_Name', Sa.Units as 'Units'
+FROM Sales Sa Join Products Pr ON Sa.Product_ID = Pr.Product_ID
+Join Stores St ON St.Store_ID = Sa.Store_ID
+) 
+Select Store_Location, SUM(Product_Cost * Units) AS TotalSalesByLocation
+FROM SalesOrderDetails
+group by Store_Location
+Order By TotalSalesByLocation;
+
+--Create a view to see the sales details view table for further analysis
+CREATE VIEW sales_details AS 
+SELECT Sa.Sale_ID 'Sales_ID', Sa.date 'Date' , Pr.Product_ID 'Product_ID', Pr.Product_Name 'Product_Name', Pr.Product_Cost 'Product_Cost', 
+		Pr.Product_Price 'Product_Price', St.Store_ID 'Store_ID', St.Store_Location 'Store_Location' , St.Store_Name 'Store_Name', Sa.Units as 'Units'
+FROM Sales Sa Join Products Pr ON Sa.Product_ID = Pr.Product_ID
+Join Stores St ON St.Store_ID = Sa.Store_ID;
+ 
+
+ select * from sales_details;
+
+ --Storewise Revenue
+ Select DISTINCT Store_Location, SUM(Units * Product_Price) OVER(Partition BY Store_Location) AS TotalSalesByLocation
+ From sales_details;
+
+ SELECT DISTINCT Store_ID, Product_ID, SUM(Units * Product_Price) OVER(Partition BY Store_ID, Product_ID ) AS StoreWiseProductRevenue
+ FROM sales_details
+ order BY Store_ID, Product_ID
+
+ --Storewise Highest selling Product
+ WITH StorewiseProRev AS
+ (
+ SELECT Store_ID, Product_ID, SUM(Units * Product_Price) OVER(Partition BY Store_ID, Product_ID ) AS StoreWiseProductRevenue
+ FROM sales_details
+ )SELECT SD.Store_Name, SD.Product_Name, MAX(StoreWiseProductRevenue)
+ FROM StorewiseProRev AS STRev JOIN sales_details SD
+ ON STRev.Product_ID = SD.Product_ID 
+ AND STRev.Store_ID = SD.Store_ID
+ Group By SD.Store_Name, SD.Product_Name
+ Order BY SD.Product_Name
+
+ --Total Sales For Each Product
+
+ Select Product_Name,YEAR(Date) 'SaleYear',SUM(Units * Product_Price) AS ToatlSalePrice, SUM(Units * Product_Cost) AS TotalProductCost
+ FROM sales_details
+ Group By YEAR(Date),Product_Name;
+
+  --Total Sales For Each Product BY Year
+
+ Select YEAR(Date) 'SaleYear',SUM(Units * Product_Price) AS ToatlSalePrice, SUM(Units * Product_Cost) AS TotalProductCost,
+ (SUM(Units * Product_Price)- SUM(Units * Product_Cost)) AS TotalProfit
+ FROM sales_details
+ Group By YEAR(Date);
+
+   --Total Sales For Each Product BY Year
+
+ Select YEAR(Date) 'Year' ,FORMAT(Date,'MMMM') 'SaleMonth',SUM(Units * Product_Price) AS ToatlSalePrice, 
+ SUM(Units * Product_Cost) AS TotalProductCost,  (SUM(Units * Product_Price)- SUM(Units * Product_Cost)) AS TotalProfit
+ FROM sales_details
+ Group By YEAR(Date),FORMAT(Date,'MMMM')
+ ORDER BY YEAR(Date);
+ 
+ --Cumaltive Revenue BY YEAR AND PRODUCT
+ SELECT YEAR(Date) 'Year', MONTH(Date) , Product_ID, Product_Name, 
+ SUM(Units * Product_Price) AS RevenueByProductByYear
+ FROM sales_details
+ Group BY YEAR(Date), MONTH(Date), Product_ID, Product_Name
+ ORDER BY YEAR(Date), MONTH(Date), Product_ID, Product_Name
+
+ --Cumalative Revenue By Year Month ProductID
+ WITH YEARCUMREVENUEYEAR AS 
+ (
+ SELECT YEAR(Date) 'OrderYear', MONTH(Date) OrderMonth, Product_ID, Product_Name, 
+ SUM(Units * Product_Price) AS RevenueByProductByYear
+ FROM sales_details
+ Group BY YEAR(Date), MONTH(Date), Product_ID, Product_Name
+  ) 
+ Select OrderYear, OrderMonth, Product_ID, Product_Name, RevenueByProductByYear, 
+ SUM(RevenueByProductByYear) OVER(Partition By OrderYear, OrderMonth
+ ORDER BY  OrderYear, OrderMonth ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) CumalativeRevenueByProductByYear
+ FROM YEARCUMREVENUEYEAR
+ ORDER BY OrderYear, OrderMonth, Product_ID
+ 
+ --Sales_Revenue Analysis
+ --Total Revenue By Product Category
+ Select P.Product_Category Product_Category, SUM(P.Product_Price * S.Units) AS TotalSalesRevenueByCategory, 
+ SUM(P.Product_Cost * S.Units) AS TotalCostByCategory
+ From Sales S JOIN Products P ON S.Product_ID = P.Product_ID
+ GROUP BY P.Product_Category;
+
+ --Total Profit & Profit Percentage By Product Category
+ WITH ProfitCategory AS
+ (
+ Select LEFT(P.Product_Category,30) Product_Category, SUM(P.Product_Price * S.Units) AS TotalSalesRevenueByCategory, 
+ SUM(P.Product_Cost * S.Units) AS TotalCostByCategory
+ From Sales S JOIN Products P ON S.Product_ID = P.Product_ID
+ GROUP BY P.Product_Category
+ )
+ SELECT Product_Category, (TotalSalesRevenueByCategory-TotalCostByCategory) AS ProfitByCategory,
+ CAST((TotalSalesRevenueByCategory-TotalCostByCategory)*100/SUM(TotalSalesRevenueByCategory-TotalCostByCategory) OVER() AS DECIMAL(10, 2)) AS ProfitPercentage
+ FROM ProfitCategory
+ ORDER BY ProfitByCategory DESC;
+
+ --Total Units Sold Per Product
+ SELECT P.Product_ID, P.Product_Name, SUM(S.Units) TotalQuantity
+ FROM Sales AS S JOIN Products P ON S.Product_ID = P.Product_ID
+ GROUP BY P.Product_ID, P.Product_Name
+
+ --Total Units Sold Per Product BY YEAR
+  SELECT P.Product_ID, P.Product_Name, YEAR(Date) AS SaleYear, SUM(S.Units) TotalQuantity
+ FROM Sales AS S JOIN Products P ON S.Product_ID = P.Product_ID
+ GROUP BY YEAR(Date), P.Product_ID, P.Product_Name
+ ORDER BY YEAR(Date), P.Product_ID
+
+ --Pivot table with CASE
+ SELECT P.Product_ID, LEFT(P.Product_Name, 50) AS ProductName,
+ SUM(CASE WHEN YEAR(Date) = 2022 THEN S.Units Else 0 END) AS 'YEAR2022',
+ SUM(CASE WHEN YEAR(Date) = 2023 THEN S.Units Else 0 END) AS 'YEAR2023'
+ FROM Sales AS S JOIN Products P ON S.Product_ID = P.Product_ID
+ GROUP BY P.Product_ID, P.Product_Name
+ --ORDER BY YEAR(Date), P.Product_ID
+
+ --YEAR to YEAR Product Demand Analysis
+ WITH ProductDemand AS
+ (
+  SELECT P.Product_ID AS 'Product_ID', LEFT(P.Product_Name, 50) AS 'ProductName',
+ SUM(CASE WHEN YEAR(Date) = 2022 THEN S.Units Else 0 END) AS 'YEAR2022',
+ SUM(CASE WHEN YEAR(Date) = 2023 THEN S.Units Else 0 END) AS 'YEAR2023'
+ FROM Sales AS S JOIN Products P ON S.Product_ID = P.Product_ID
+ GROUP BY P.Product_ID, P.Product_Name
+ )
+ SELECT Product_ID, ProductName, YEAR2022, YEAR2023, CAST((YEAR2023-YEAR2022)*100.0/YEAR2023 AS decimal(10, 2)) AS 'Demand'
+ FROM ProductDemand
+
+ --5 Top Selling Product Yearly Wise
+ WITH YEAR2022 AS
+ (
+ Select TOP 5 S.Product_ID, 
+ SUM(CASE WHEN YEAR(S.Date)=2022 THEN S.Units Else 0 END) AS 'Year2022'
+ From Sales S
+ GROUP BY S.Product_ID
+ ORDER BY Year2022 DESC),
+ YEAR2023 AS
+ (
+  Select TOP 5 S.Product_ID, 
+ SUM(CASE WHEN YEAR(S.Date)=2023 THEN S.Units Else 0 END) AS 'Year2023'
+ From Sales S
+ GROUP BY S.Product_ID
+ ORDER BY Year2023 DESC
+ )
+ SELECT COALESCE(Y22.Product_ID, Y23.Product_ID) AS ProductID, P.Product_Name 'Product Name', Year2022, Y23.Year2023
+ FROM YEAR2022 Y22 FULL OUTER JOIN YEAR2023 Y23 ON Y22.Product_ID = Y23.Product_ID
+ JOIN Products P ON P.Product_ID = Y22.Product_ID OR P.Product_ID = Y23.Product_ID
+
+ --Renevenue Growth rate by Month to Month
+ WITH MonthRevCal AS
+ (
+ SELECT YEAR(S.Date) SALEYEAR, MONTH(S.Date) Month_NO, FORMAT(S.Date,'MMMM') 'MONTH_NAME', SUM(S.Units) 'CurrentMonthSale'
+ FROM Sales As S
+ GROUP BY YEAR(S.Date), MONTH(S.Date),FORMAT(S.Date,'MMMM')
+ ),
+ MonthRevCalBYRow AS
+ (
+ SELECT ROW_NUMBER() OVER(Order BY SALEYEAR, Month_NO)AS rownum, SALEYEAR, Month_NO, MONTH_NAME, CurrentMonthSale
+ FROM MonthRevCal
+ ),
+ FinalRevTable AS(
+ SELECT rownum, SALEYEAR, Month_NO, MONTH_NAME,CurrentMonthSale,
+ ISNULL(LAG(CurrentMonthSale) OVER(order By rownum),0) PreviousMonthSale
+ FROM MonthRevCalBYRow)
+ SELECT SALEYEAR, Month_NO, MONTH_NAME, CurrentMonthSale, PreviousMonthSale,
+ (CASE 
+	WHEN ISNULL(PreviousMonthSale,0) = 0 THEN 0 
+	ELSE CAST(((CurrentMonthSale - PreviousMonthSale)*100.0/PreviousMonthSale)AS DECIMAL(10,4))
+	END) AS RevenueGrowth
+FROM FinalRevTable
