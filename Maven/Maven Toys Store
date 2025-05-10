@@ -1,0 +1,7 @@
+Revenue Analysis of Maven Toys Store for 2022 and 2023
+
+Conducted a revenue analysis of Maven Toys Store, focusing on sales and profit trends across various store locations. 
+The analysis compared performance between 2022 and 2023. While complete data was available for 2022, the 2023 dataset 
+only included data up to October. To enable a year-over-year comparison, dummy data was generated for the remaining 
+months of 2023 based on previous trends. This approach allowed for a more comprehensive insight into performance 
+patterns and business growth across both years.
